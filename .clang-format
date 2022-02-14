@@ -10,6 +10,7 @@ AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Inline
 AlwaysBreakTemplateDeclarations: Yes
 AllowAllConstructorInitializersOnNextLine: false
+AllowShortEnumsOnASingleLine: false
 IndentWidth: 4
 PointerAlignment: Left
 Standard: c++11
