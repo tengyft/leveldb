@@ -20,20 +20,20 @@ namespace leveldb {
 //     ... some complex code, possibly with multiple return paths ...
 //   }
 
+/// MutexLock 对象构造时加锁，析构时解锁。
 class SCOPED_LOCKABLE MutexLock {
- public:
-  explicit MutexLock(port::Mutex* mu) EXCLUSIVE_LOCK_FUNCTION(mu) : mu_(mu) {
-    this->mu_->Lock();
-  }
-  ~MutexLock() UNLOCK_FUNCTION() { this->mu_->Unlock(); }
+public:
+    explicit MutexLock(port::Mutex* mu) EXCLUSIVE_LOCK_FUNCTION(mu) : mu_(mu) { mu_->Lock(); }
+    ~MutexLock() UNLOCK_FUNCTION() { mu_->Unlock(); }
 
-  MutexLock(const MutexLock&) = delete;
-  MutexLock& operator=(const MutexLock&) = delete;
+    /// 禁止拷贝
+    MutexLock(const MutexLock&) = delete;
+    MutexLock& operator=(const MutexLock&) = delete;
 
- private:
-  port::Mutex* const mu_;
+private:
+    port::Mutex* const mu_;
 };
 
-}  // namespace leveldb
+} // namespace leveldb
 
-#endif  // STORAGE_LEVELDB_UTIL_MUTEXLOCK_H_
+#endif // STORAGE_LEVELDB_UTIL_MUTEXLOCK_H_

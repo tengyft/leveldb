@@ -58,6 +58,7 @@ public:
 // Return a builtin comparator that uses lexicographic byte-wise
 // ordering.  The result remains the property of this module and
 // must not be deleted.
+/// 返回内置的比较器，其生存期为进程生存期，不允许 delete 返回的比较器。
 LEVELDB_EXPORT const Comparator* BytewiseComparator();
 
 } // namespace leveldb

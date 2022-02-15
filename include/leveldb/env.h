@@ -51,19 +51,20 @@ class WritableFile;
 /// 定义 Env 接口
 class LEVELDB_EXPORT Env {
 public:
-    Env();
+    Env() = default;
 
     /// 禁止拷贝
     Env(const Env&) = delete;
     Env& operator=(const Env&) = delete;
 
-    virtual ~Env();
+    virtual ~Env() = default;
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own Env
     // implementation instead of relying on this default environment.
     //
     // The result of Default() belongs to leveldb and must never be deleted.
+    /// 返回可供当前操作系统使用的默认环境变量。有经验的用户可以自己实现 Env
     static Env* Default();
 
     // Create an object that sequentially reads the file with the specified name.
@@ -156,6 +157,7 @@ public:
     // code should call RemoveDir.
     //
     // A future release will remove this method.
+    /// 被废弃的接口，应该使用 RemoveDir。
     virtual Status DeleteDir(const std::string& dirname);
 
     // Store the size of fname in *file_size.
@@ -215,14 +217,16 @@ public:
 };
 
 // A file abstraction for reading sequentially through a file
+/// 顺序读取文件的抽象接口
 class LEVELDB_EXPORT SequentialFile {
 public:
     SequentialFile() = default;
 
+    /// 禁止拷贝
     SequentialFile(const SequentialFile&) = delete;
     SequentialFile& operator=(const SequentialFile&) = delete;
 
-    virtual ~SequentialFile();
+    virtual ~SequentialFile() = default;
 
     // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
     // written by this routine.  Sets "*result" to the data that was
@@ -249,10 +253,11 @@ class LEVELDB_EXPORT RandomAccessFile {
 public:
     RandomAccessFile() = default;
 
+    /// 禁止拷贝
     RandomAccessFile(const RandomAccessFile&) = delete;
     RandomAccessFile& operator=(const RandomAccessFile&) = delete;
 
-    virtual ~RandomAccessFile();
+    virtual ~RandomAccessFile() = default;
 
     // Read up to "n" bytes from the file starting at "offset".
     // "scratch[0..n-1]" may be written by this routine.  Sets "*result"
@@ -276,7 +281,7 @@ public:
     WritableFile(const WritableFile&) = delete;
     WritableFile& operator=(const WritableFile&) = delete;
 
-    virtual ~WritableFile();
+    virtual ~WritableFile() = default;
 
     virtual Status Append(const Slice& data) = 0;
     virtual Status Close()                   = 0;
@@ -292,7 +297,7 @@ public:
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
 
-    virtual ~Logger();
+    virtual ~Logger() = default;
 
     // Write an entry to the log file with the specified format.
     virtual void Logv(const char* format, std::va_list ap) = 0;
@@ -306,7 +311,7 @@ public:
     FileLock(const FileLock&) = delete;
     FileLock& operator=(const FileLock&) = delete;
 
-    virtual ~FileLock();
+    virtual ~FileLock() = default;
 };
 
 // Log the specified data to *info_log if info_log is non-null.
@@ -329,7 +334,7 @@ class LEVELDB_EXPORT EnvWrapper : public Env {
 public:
     // Initialize an EnvWrapper that delegates all calls to *t.
     explicit EnvWrapper(Env* t) : target_(t) {}
-    ~EnvWrapper() override;
+    ~EnvWrapper() override = default;
 
     // Return the target to which this Env forwards all calls.
     Env* target() const { return target_; }
