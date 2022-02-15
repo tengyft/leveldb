@@ -20,6 +20,7 @@ namespace leveldb {
 
 namespace {
 
+/// FileState 用于管理某个文件在内存中的数据，提供引用计数和 block 管理。
 class FileState {
 public:
     // FileStates are reference counted. The initial reference count is zero
@@ -58,11 +59,13 @@ public:
         }
     }
 
+    /// 内存中共有多少个字节的数据。
     uint64_t Size() const {
         MutexLock lock(&blocks_mutex_);
         return size_;
     }
 
+    /// 清空内存中管理的所有数据，并释放 block 占用的内存空间。
     void Truncate() {
         MutexLock lock(&blocks_mutex_);
         for (char*& block : blocks_) {
@@ -72,6 +75,7 @@ public:
         size_ = 0;
     }
 
+    /// 从 offset 开始读 n 个字节，保存在 scratch 指向的内存中，*result 由 scratch 和 n 组成
     Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const {
         MutexLock lock(&blocks_mutex_);
         if (offset > size_) {
@@ -87,28 +91,29 @@ public:
         }
 
         assert(offset / kBlockSize <= std::numeric_limits<size_t>::max());
-        size_t block         = static_cast<size_t>(offset / kBlockSize);
-        size_t block_offset  = offset % kBlockSize;
-        size_t bytes_to_copy = n;
-        char*  dst           = scratch;
+        auto   block         = static_cast<size_t>(offset / kBlockSize); /// block 块号
+        size_t block_offset  = offset % kBlockSize;                      /// block 块内偏移
+        size_t bytes_to_copy = n;                                        /// 还需要 copy 的字节数
+        char*  dst           = scratch;                                  /// 保存在哪
 
         while (bytes_to_copy > 0) {
-            size_t avail = kBlockSize - block_offset;
+            size_t avail = kBlockSize - block_offset; /// block 内还可以读多少个字节
             if (avail > bytes_to_copy) {
                 avail = bytes_to_copy;
             }
             std::memcpy(dst, blocks_[block] + block_offset, avail);
 
-            bytes_to_copy -= avail;
-            dst += avail;
-            block++;
-            block_offset = 0;
+            bytes_to_copy -= avail; /// 剩余多少个字节待读
+            dst += avail;           /// 已经读取多少个字节，需要移动指针
+            block++;                /// 如果还需要读的话，接着读下一个 block
+            block_offset = 0;       /// 新 block 从 0 开始读
         }
 
         *result = Slice(scratch, n);
         return Status::OK();
     }
 
+    /// 向 FileState 对象(其管理的内存)中追加数据。
     Status Append(const Slice& data) {
         const char* src     = data.data();
         size_t      src_len = data.size();
@@ -116,32 +121,35 @@ public:
         MutexLock lock(&blocks_mutex_);
         while (src_len > 0) {
             size_t avail;
-            size_t offset = size_ % kBlockSize;
+            size_t offset = size_ % kBlockSize; /// 块内偏移
 
             if (offset != 0) {
                 // There is some room in the last block.
+                /// blocks_ 中最后一个块还有空间可以追加数据。
+                /// avail 表示这最后的块还有多少字节的空间可以追加数据。
                 avail = kBlockSize - offset;
             } else {
                 // No room in the last block; push new one.
+                /// blocks_ 中管理的块都已经存满数据了，不能向已有块追加数据了，需要新一个块。
                 blocks_.push_back(new char[kBlockSize]);
                 avail = kBlockSize;
             }
 
             if (avail > src_len) {
+                /// 保证不多写数据
                 avail = src_len;
             }
             std::memcpy(blocks_.back() + offset, src, avail);
-            src_len -= avail;
-            src += avail;
-            size_ += avail;
+            src_len -= avail; /// 已经追加了 avail 个字节的数据，更新剩余多少个字节的数据需要追加
+            src += avail;     /// 更新源数据指针，下次从哪开始读数据，追加到块中
+            size_ += avail;   /// FileState 块中已经保存了多少个字节的数据
         }
 
         return Status::OK();
     }
 
 private:
-    enum
-    { kBlockSize = 8 * 1024 };
+    const int kBlockSize = 8 * 1024;
 
     // Private since only Unref() should be used to delete it.
     /// 私有析构函数，所以只能通过 Unref() 来释放 FileState 资源
@@ -150,9 +158,9 @@ private:
     port::Mutex refs_mutex_;             /// 引用锁
     int refs_   GUARDED_BY(refs_mutex_); /// 引用计数
 
-    mutable port::Mutex        blocks_mutex_;             /// 阻塞锁
-    std::vector<char*> blocks_ GUARDED_BY(blocks_mutex_); ///
-    uint64_t size_             GUARDED_BY(blocks_mutex_); /// 阻塞数
+    mutable port::Mutex        blocks_mutex_;             /// 块锁，用于同步块的读写操作
+    std::vector<char*> blocks_ GUARDED_BY(blocks_mutex_); /// 保存内存中所有的 block 地址
+    uint64_t size_ GUARDED_BY(blocks_mutex_); /// 内存中已经缓存了多少个字节的数据，这些数据保存在 blocks_ 管理的内存中
 };
 
 class SequentialFileImpl : public SequentialFile {
@@ -370,7 +378,8 @@ public:
 
 private:
     // Map from filenames to FileState objects, representing a simple file system.
-    typedef std::map<std::string, FileState*> FileSystem;
+    /// key: 文件名  value: 对应的 FileState
+    using FileSystem = std::map<std::string, FileState*>;
 
     port::Mutex          mutex_;
     FileSystem file_map_ GUARDED_BY(mutex_);

@@ -64,7 +64,7 @@ public:
     // implementation instead of relying on this default environment.
     //
     // The result of Default() belongs to leveldb and must never be deleted.
-    /// 返回可供当前操作系统使用的默认环境变量。有经验的用户可以自己实现 Env
+    /// 返回可供当前操作系统使用的默认 Env。有经验的用户可以自己实现 Env。
     static Env* Default();
 
     // Create an object that sequentially reads the file with the specified name.
@@ -330,6 +330,18 @@ LEVELDB_EXPORT Status ReadFileToString(Env* env, const std::string& fname, std::
 // An implementation of Env that forwards all calls to another Env.
 // May be useful to clients who wish to override just part of the
 // functionality of another Env.
+/// EnvWrapper 会将 Env 所有的请求都中转给绑定的 Env。这个类的主要用途是：子类可以只实现自己关心的接口，其他的接口直接使用绑定的 Env
+/// 自己本身提供的接口。比如，你可以这样实现：
+/// class CustomEnv : public EnvWrapper {
+/// public:
+///     CustomEnv(Env* t) : EnvWrapper{t} {}
+///
+///     /// 重写 FileExists
+///     bool FileExists(const std::string& filename) { 自己的实现; }
+///
+/// ...
+/// }
+/// auto env = new CustomEnv{Env::Default()};
 class LEVELDB_EXPORT EnvWrapper : public Env {
 public:
     // Initialize an EnvWrapper that delegates all calls to *t.
