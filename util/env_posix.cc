@@ -66,14 +66,15 @@ Status PosixError(const std::string& context, int error_number) {
 }
 
 // Helper class to limit resource usage to avoid exhaustion.
-// Currently used to limit read-only file descriptors and mmap file usage
+// Currently, used to limit read-only file descriptors and mmap file usage
 // so that we do not run out of file descriptors or virtual memory, or run into
 // kernel performance problems for very large databases.
 class Limiter {
 public:
     // Limit maximum number of resources to |max_acquires|.
-    Limiter(int max_acquires) : acquires_allowed_(max_acquires) {}
+    explicit Limiter(int max_acquires) : acquires_allowed_(max_acquires) {}
 
+    /// 禁止拷贝
     Limiter(const Limiter&) = delete;
     Limiter operator=(const Limiter&) = delete;
 
@@ -105,6 +106,7 @@ private:
 //
 // Instances of this class are thread-friendly but not thread-safe, as required
 // by the SequentialFile API.
+/// PosixSequentialFile 通过 read() 实现了顺序读接口。通过查看代码可知 fd 是阻塞读。
 class PosixSequentialFile final : public SequentialFile {
 public:
     PosixSequentialFile(std::string filename, int fd) : fd_(fd), filename_(std::move(filename)) {}
@@ -135,8 +137,8 @@ public:
     }
 
 private:
-    const int         fd_;
-    const std::string filename_;
+    const int         fd_;       /// 对应的文件描述符
+    const std::string filename_; /// 文件名，可以是相对路径名，也可以是绝对路径名
 };
 
 // Implements random read access in a file using pread().
@@ -470,6 +472,7 @@ private:
     std::set<std::string> locked_files_ GUARDED_BY(mu_);
 };
 
+/// PosixEnv 应该作为单例使用，即 PosixEnv 对象生存期为静态生存期。
 class PosixEnv : public Env {
 public:
     PosixEnv();
@@ -690,7 +693,7 @@ private:
     // Instances are constructed on the thread calling Schedule() and used on the
     // background thread.
     //
-    // This structure is thread-safe beacuse it is immutable.
+    // This structure is thread-safe because it is immutable.
     struct BackgroundWorkItem {
         explicit BackgroundWorkItem(void (*function)(void* arg), void* arg) : function(function), arg(arg) {}
 

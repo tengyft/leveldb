@@ -236,6 +236,8 @@ public:
     // If an error was encountered, returns a non-OK status.
     //
     // REQUIRES: External synchronization
+    /// 从文件中读取至多 n 个字节。读取的数据会被填充到 scratch 指向的内存中，result 也关联了对应的读取结果。
+    /// 最终成功读取的数据可以小于 n 个字节。
     virtual Status Read(size_t n, Slice* result, char* scratch) = 0;
 
     // Skip "n" bytes from the file. This is guaranteed to be no
@@ -245,10 +247,12 @@ public:
     // file, and Skip will return OK.
     //
     // REQUIRES: External synchronization
+    /// 略过 n 个字节。
     virtual Status Skip(uint64_t n) = 0;
 };
 
 // A file abstraction for randomly reading the contents of a file.
+/// 文件随机读抽象接口
 class LEVELDB_EXPORT RandomAccessFile {
 public:
     RandomAccessFile() = default;
@@ -268,6 +272,7 @@ public:
     // status.
     //
     // Safe for concurrent use by multiple threads.
+    /// 从 offset 处读取至多 n 个字节，读取的内容填充到 scratch 指向的内存中。result 与 scratch 绑定。
     virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const = 0;
 };
 
