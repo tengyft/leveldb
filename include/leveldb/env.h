@@ -275,6 +275,8 @@ public:
     //
     // Safe for concurrent use by multiple threads.
     /// 从 offset 处读取至多 n 个字节，读取的内容填充到 scratch 指向的内存中。result 与 scratch 绑定。
+    ///
+    /// 此接口在多线程中调用安全。
     virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const = 0;
 };
 

@@ -27,11 +27,11 @@ public:
     Status() noexcept : state_(nullptr) {}
     ~Status() { delete[] state_; }
 
-    // 拷贝
+    /// 拷贝
     Status(const Status& rhs);
     Status& operator=(const Status& rhs);
 
-    // 移动
+    /// 移动
     Status(Status&& rhs) noexcept : state_(rhs.state_) { rhs.state_ = nullptr; }
     Status& operator=(Status&& rhs) noexcept;
 
@@ -79,12 +79,12 @@ private:
     };
     // clang-format on
 
-    // Status 对象所表示的错误码
+    /// Status 对象所表示的错误码
     Code code() const { return (state_ == nullptr) ? kOk : static_cast<Code>(state_[4]); }
-    // 构造 Status 对象，这个对象错误码为 code, 错误提示信息为 "${msg}: ${msg2}"
+    /// 构造 Status 对象，这个对象错误码为 code, 错误提示信息为 "${msg}: ${msg2}"
     Status(Code code, const Slice& msg, const Slice& msg2);
 
-    // 深拷贝 s 指向的 state
+    /// 深拷贝 s 指向的 state
     static const char* CopyState(const char* s);
 
     // OK status has a null state_.  Otherwise, state_ is a new[] array

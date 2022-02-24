@@ -209,6 +209,8 @@ private:
 // Instances of this class are thread-safe, as required by the RandomAccessFile
 // API. Instances are immutable and Read() only calls thread-safe library
 // functions.
+/// 使用 mmap() 来实现对文件的随机读。
+/// PosixMmapReadableFile 实例是线程安全的。
 class PosixMmapReadableFile final : public RandomAccessFile {
 public:
     // mmap_base[0, length-1] points to the memory-mapped contents of the file. It
@@ -216,8 +218,11 @@ public:
     // over the ownership of the region.
     //
     // |mmap_limiter| must outlive this instance. The caller must have already
-    // aquired the right to use one mmap region, which will be released when this
+    // acquired the right to use one mmap region, which will be released when this
     // instance is destroyed.
+    /// mmap_base[0, length-1] 所代表的内存与文件一一映射。mmap_base 必须是 mmap() 调用成功后返回的内存地址。新建的 PosixMmapReadableFile
+    /// 实例会接管这段映射的内存区域。PosixMmapReadableFile 中的 mmap_limiter_ 引用了外部的 Limiter，这个 Limiter 在这个 PosixMmapReadable 实例
+    /// destroy 之前不能销毁。并且在创建新的 PosixMmapReadableFile 实例之前，需要先从这个 Limiter 成功申请一个资源使用权限。
     PosixMmapReadableFile(std::string filename, char* mmap_base, size_t length, Limiter* mmap_limiter)
         : mmap_base_(mmap_base), length_(length), mmap_limiter_(mmap_limiter), filename_(std::move(filename)) {}
 
@@ -506,10 +511,13 @@ public:
         }
 
         if (!mmap_limiter_.Acquire()) {
+            /// 没有 mmap 使用资源了，则尝试创建 PosixRandomAccessFile 而不使用 PosixMmapReadableFile。
+            /// 不过，如果尝试创建的 PosixRandomAccessFile 对象数量超限，会把前面打开的 fd 关闭，生成一个无效和 PosixRandomAccessFile 对象。
             *result = new PosixRandomAccessFile(filename, fd, &fd_limiter_);
             return Status::OK();
         }
 
+        /// 成功申请一个 mmap 使用权限
         uint64_t file_size;
         Status   status = GetFileSize(filename, &file_size);
         if (status.ok()) {
@@ -520,8 +528,10 @@ public:
                 status = PosixError(filename, errno);
             }
         }
+        /// 不管 mmap 成功与否，fd 都可以关闭了。
         ::close(fd);
         if (!status.ok()) {
+            /// mmap 不成功，或者 GetFileSize() 不成功都需要归还 mmap 使用权限。
             mmap_limiter_.Release();
         }
         return status;
@@ -722,11 +732,13 @@ private:
 };
 
 // Return the maximum number of concurrent mmaps.
+/// 返回可以同时打开的 mmap 数量。
 int MaxMmaps() {
     return g_mmap_limit;
 }
 
 // Return the maximum number of read-only files to keep open.
+/// 返回可以打开的只读文件数量
 int MaxOpenFiles() {
     if (g_open_read_only_file_limit >= 0) {
         return g_open_read_only_file_limit;
