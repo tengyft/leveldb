@@ -69,6 +69,7 @@ Status PosixError(const std::string& context, int error_number) {
 // Currently, used to limit read-only file descriptors and mmap file usage
 // so that we do not run out of file descriptors or virtual memory, or run into
 // kernel performance problems for very large databases.
+/// Limiter 是一个用于避免资源耗尽的辅助类。当前 Limiter 仅用于限制只读文件描述符和 mmap 文件的使用。
 class Limiter {
 public:
     // Limit maximum number of resources to |max_acquires|.
@@ -81,6 +82,7 @@ public:
     // If another resource is available, acquire it and return true.
     // Else return false.
     bool Acquire() {
+        /// fetch_sub 会将 atomic 对象减 1，并返回老值
         int old_acquires_allowed = acquires_allowed_.fetch_sub(1, std::memory_order_relaxed);
 
         if (old_acquires_allowed > 0)
@@ -112,6 +114,7 @@ public:
     PosixSequentialFile(std::string filename, int fd) : fd_(fd), filename_(std::move(filename)) {}
     ~PosixSequentialFile() override { close(fd_); }
 
+    /// 从文件中读取至多 n 个字节到 scratch 中，result 底层指向的内存也是 scratch。
     Status Read(size_t n, Slice* result, char* scratch) override {
         Status status;
         while (true) {
@@ -129,6 +132,7 @@ public:
         return status;
     }
 
+    /// 从当前位置跳过 n 个字节，即设置文件新的读指针。
     Status Skip(uint64_t n) override {
         if (::lseek(fd_, n, SEEK_CUR) == static_cast<off_t>(-1)) {
             return PosixError(filename_, errno);
@@ -453,6 +457,7 @@ private:
 // same process.
 //
 // Instances are thread-safe because all member data is guarded by a mutex.
+/// 通过 PosixEnv::LockFile() 锁定的文件，都会被保存在 PosixLockTable 中。
 class PosixLockTable {
 public:
     bool Insert(const std::string& fname) LOCKS_EXCLUDED(mu_) {
@@ -695,7 +700,11 @@ private:
     //
     // This structure is thread-safe because it is immutable.
     struct BackgroundWorkItem {
-        explicit BackgroundWorkItem(void (*function)(void* arg), void* arg) : function(function), arg(arg) {}
+        // clang-format off
+        explicit BackgroundWorkItem(void (*function)(void* arg), void* arg)
+            : function(function),
+              arg(arg) {}
+        // clang-format on
 
         void (*const function)(void*);
         void* const arg;
@@ -708,8 +717,8 @@ private:
     std::queue<BackgroundWorkItem> background_work_queue_ GUARDED_BY(background_work_mutex_);
 
     PosixLockTable locks_;        // Thread-safe.
-    Limiter        mmap_limiter_; // Thread-safe.
-    Limiter        fd_limiter_;   // Thread-safe.
+    Limiter        mmap_limiter_; // Thread-safe. 用于限制 mmap 文件的数量
+    Limiter        fd_limiter_;   // Thread-safe. 用于限制随机读文件的打开数量
 };
 
 // Return the maximum number of concurrent mmaps.
@@ -737,9 +746,13 @@ int MaxOpenFiles() {
 
 } // namespace
 
+// clang-format off
 PosixEnv::PosixEnv()
-    : background_work_cv_(&background_work_mutex_), started_background_thread_(false), mmap_limiter_(MaxMmaps()),
+    : background_work_cv_(&background_work_mutex_),
+      started_background_thread_(false),
+      mmap_limiter_(MaxMmaps()),
       fd_limiter_(MaxOpenFiles()) {}
+// clang-format on
 
 void PosixEnv::Schedule(void (*background_work_function)(void* background_work_arg), void* background_work_arg) {
     background_work_mutex_.Lock();

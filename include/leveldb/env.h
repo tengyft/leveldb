@@ -134,6 +134,7 @@ public:
     // code should call RemoveFile.
     //
     // A future release will remove this method.
+    /// 废弃接口，请使用 RemoveFile 接口。
     virtual Status DeleteFile(const std::string& fname);
 
     // Create the specified directory.
@@ -197,6 +198,7 @@ public:
 
     // Start a new thread, invoking "function(arg)" within the new thread.
     // When "function(arg)" returns, the thread will be destroyed.
+    /// 开启一个 detached 的线程，即这个线程无法被 join。 function 返回了，就意味着线程结束了。
     virtual void StartThread(void (*function)(void* arg), void* arg) = 0;
 
     // *path is set to a temporary directory that can be used for testing. It may
