@@ -55,7 +55,7 @@ constexpr const int kOpenBaseFlags = O_CLOEXEC;
 constexpr const int kOpenBaseFlags = 0;
 #endif // defined(HAVE_O_CLOEXEC)
 
-constexpr const size_t kWritableFileBufferSize = 65536;
+constexpr const size_t kWritableFileBufferSize = 65536; /// 64k
 
 Status PosixError(const std::string& context, int error_number) {
     if (error_number == ENOENT) {
@@ -221,8 +221,8 @@ public:
     // acquired the right to use one mmap region, which will be released when this
     // instance is destroyed.
     /// mmap_base[0, length-1] 所代表的内存与文件一一映射。mmap_base 必须是 mmap() 调用成功后返回的内存地址。新建的 PosixMmapReadableFile
-    /// 实例会接管这段映射的内存区域。PosixMmapReadableFile 中的 mmap_limiter_ 引用了外部的 Limiter，这个 Limiter 在这个 PosixMmapReadable 实例
-    /// destroy 之前不能销毁。并且在创建新的 PosixMmapReadableFile 实例之前，需要先从这个 Limiter 成功申请一个资源使用权限。
+    /// 实例会接管这段映射的内存区域。PosixMmapReadableFile 中的 mmap_limiter_ 引用了外部的 Limiter，这个 Limiter 在这个 PosixMmapReadable
+    /// 实例 destroy 之前不能销毁。并且在创建新的 PosixMmapReadableFile 实例之前，需要先从这个 Limiter 成功申请一个资源使用权限。
     PosixMmapReadableFile(std::string filename, char* mmap_base, size_t length, Limiter* mmap_limiter)
         : mmap_base_(mmap_base), length_(length), mmap_limiter_(mmap_limiter), filename_(std::move(filename)) {}
 
@@ -242,10 +242,10 @@ public:
     }
 
 private:
-    char* const       mmap_base_;
-    const size_t      length_;
-    Limiter* const    mmap_limiter_;
-    const std::string filename_;
+    char* const       mmap_base_;    /// mmap 映射的起始地址
+    const size_t      length_;       /// mmap 映射块大小
+    Limiter* const    mmap_limiter_; /// 外部传入的 mmap 资源数据限制器，其生存期需要与本实例长
+    const std::string filename_;     /// 打开了哪个文件
 };
 
 class PosixWritableFile final : public WritableFile {
@@ -393,7 +393,7 @@ private:
     static std::string Dirname(const std::string& filename) {
         std::string::size_type separator_pos = filename.rfind('/');
         if (separator_pos == std::string::npos) {
-            return std::string(".");
+            return ".";
         }
         // The filename component should not contain a path separator. If it does,
         // the splitting was done incorrectly.
@@ -409,26 +409,28 @@ private:
     static Slice Basename(const std::string& filename) {
         std::string::size_type separator_pos = filename.rfind('/');
         if (separator_pos == std::string::npos) {
-            return Slice(filename);
+            return {filename};
         }
         // The filename component should not contain a path separator. If it does,
         // the splitting was done incorrectly.
         assert(filename.find('/', separator_pos + 1) == std::string::npos);
 
-        return Slice(filename.data() + separator_pos + 1, filename.length() - separator_pos - 1);
+        return {filename.data() + separator_pos + 1, filename.length() - separator_pos - 1};
     }
 
     // True if the given file is a manifest file.
+    /// 检测指定文件是否是一个 manifest 文件
     static bool IsManifest(const std::string& filename) { return Basename(filename).starts_with("MANIFEST"); }
 
+private:
     // buf_[0, pos_ - 1] contains data to be written to fd_.
     char   buf_[kWritableFileBufferSize];
-    size_t pos_;
+    size_t pos_ = 0;
     int    fd_;
 
     const bool        is_manifest_; // True if the file's name starts with MANIFEST.
-    const std::string filename_;
-    const std::string dirname_; // The directory of filename_.
+    const std::string filename_;    /// 要写的文件名(绝对路径或相对于当前路径的路径)
+    const std::string dirname_;     // The directory of filename_.
 };
 
 int LockOrUnlock(int fd, bool lock) {

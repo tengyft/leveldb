@@ -218,6 +218,8 @@ public:
     virtual void SleepForMicroseconds(int micros) = 0;
 };
 
+/// SequentialFile 和 RandomAccessFile 都是只读文件。WritableFile 是可写文件
+
 // A file abstraction for reading sequentially through a file
 /// 顺序读取文件的抽象接口
 class LEVELDB_EXPORT SequentialFile {
@@ -283,10 +285,12 @@ public:
 // A file abstraction for sequential writing.  The implementation
 // must provide buffering since callers may append small fragments
 // at a time to the file.
+/// 可写文件的抽象接口。由于调用者会向文件中一次添加一些小块数据，WritableFile 的子类实现必须提供缓存机制。
 class LEVELDB_EXPORT WritableFile {
 public:
     WritableFile() = default;
 
+    /// 禁止拷贝
     WritableFile(const WritableFile&) = delete;
     WritableFile& operator=(const WritableFile&) = delete;
 
