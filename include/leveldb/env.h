@@ -74,6 +74,8 @@ public:
     // NotFound status when the file does not exist.
     //
     // The returned file will only be accessed by one thread at a time.
+    /// 创建一个 SequentialFile 对象，这个对象可以顺序读取 fname 指定的文件。函数成功执行后，返回 OK，并将新建的 SequentialFile 对象保存
+    /// 在 *result 中。
     virtual Status NewSequentialFile(const std::string& fname, SequentialFile** result) = 0;
 
     // Create an object supporting random-access reads from the file with the
@@ -115,6 +117,7 @@ public:
     // Store in *result the names of the children of the specified directory.
     // The names are relative to "dir".
     // Original contents of *results are dropped.
+    /// 将指定目录下文件名 (包括普通文件名、目录文件名) 保存在 *result 中。函数会清空 *result 的初始内容。
     virtual Status GetChildren(const std::string& dir, std::vector<std::string>* result) = 0;
     // Delete the named file.
     //
@@ -303,10 +306,12 @@ public:
 };
 
 // An interface for writing log messages.
+/// logger 接口
 class LEVELDB_EXPORT Logger {
 public:
     Logger() = default;
 
+    /// 禁止拷贝
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
 
@@ -317,10 +322,12 @@ public:
 };
 
 // Identifies a locked file.
+/// 标记一个被锁住的文件。
 class LEVELDB_EXPORT FileLock {
 public:
     FileLock() = default;
 
+    /// 禁止拷贝。
     FileLock(const FileLock&) = delete;
     FileLock& operator=(const FileLock&) = delete;
 
@@ -335,9 +342,11 @@ void Log(Logger* info_log, const char* format, ...)
     ;
 
 // A utility routine: write "data" to the named file.
+/// 功能函数：将 data 通过 env 提供的接口写入 fname 指定的文件里。
 LEVELDB_EXPORT Status WriteStringToFile(Env* env, const Slice& data, const std::string& fname);
 
 // A utility routine: read contents of named file into *data
+/// 功能函数：通过 env 提供的接口，将 fname 指定的文件，内容读取到 data 中。
 LEVELDB_EXPORT Status ReadFileToString(Env* env, const std::string& fname, std::string* data);
 
 // An implementation of Env that forwards all calls to another Env.
@@ -399,6 +408,6 @@ private:
     #else
         #define DeleteFile DeleteFileA
     #endif // defined(UNICODE)
-#endif // defined(_WIN32) && defined(LEVELDB_DELETEFILE_UNDEFINED)
+#endif     // defined(_WIN32) && defined(LEVELDB_DELETEFILE_UNDEFINED)
 
 #endif // STORAGE_LEVELDB_INCLUDE_ENV_H_

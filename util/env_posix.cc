@@ -43,6 +43,7 @@ namespace {
 int g_open_read_only_file_limit = -1;
 
 // Up to 1000 mmap regions for 64-bit binaries; none for 32-bit.
+/// 64 位操作系统中默认可以开启的 mmap 数据限制为 1000。
 constexpr const int kDefaultMmapLimit = (sizeof(void*) >= 8) ? 1000 : 0;
 
 // Can be set using EnvPosixTestHelper::SetReadOnlyMMapLimit().
@@ -158,6 +159,7 @@ public:
         : has_permanent_fd_(fd_limiter->Acquire()), fd_(has_permanent_fd_ ? fd : -1), fd_limiter_(fd_limiter),
           filename_(std::move(filename)) {
         if (!has_permanent_fd_) {
+            /// 由于打开的可读文件数量限制，没有申请权限，直接关闭已经打开的文件描述符。
             assert(fd_ == -1);
             ::close(fd); // The file will be opened on every read.
         }
@@ -227,12 +229,15 @@ public:
         : mmap_base_(mmap_base), length_(length), mmap_limiter_(mmap_limiter), filename_(std::move(filename)) {}
 
     ~PosixMmapReadableFile() override {
+        /// PosixMmapReadableFile 实例销毁时，需要解除内存与文件的映射关系
         ::munmap(static_cast<void*>(mmap_base_), length_);
+        /// 同时归还资源使用权。
         mmap_limiter_->Release();
     }
 
     Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const override {
         if (offset + n > length_) {
+            /// 要求读取的数据超限了。
             *result = Slice();
             return PosixError(filename_, EINVAL);
         }
@@ -248,6 +253,7 @@ private:
     const std::string filename_;     /// 打开了哪个文件
 };
 
+/// 管理 Posix 可写文件。
 class PosixWritableFile final : public WritableFile {
 public:
     PosixWritableFile(std::string filename, int fd)
@@ -260,11 +266,13 @@ public:
         }
     }
 
+    /// 追加数据。
     Status Append(const Slice& data) override {
         size_t      write_size = data.size();
         const char* write_data = data.data();
 
         // Fit as much as possible into buffer.
+        /// 尽量写在缓存中
         size_t copy_size = std::min(write_size, kWritableFileBufferSize - pos_);
         std::memcpy(buf_ + pos_, write_data, copy_size);
         write_data += copy_size;
@@ -275,12 +283,14 @@ public:
         }
 
         // Can't fit in buffer, so need to do at least one write.
+        /// 缓存已经满了，但是还有额外的数据没有写完，所以至少需要一次缓存刷新操作。
         Status status = FlushBuffer();
         if (!status.ok()) {
             return status;
         }
 
         // Small writes go to buffer, large writes are written directly.
+        /// 剩余的数据如果不足以填充满写缓存，就把数据写入缓存中；但是如果剩余的数据过多，就直接写入底层文件中。
         if (write_size < kWritableFileBufferSize) {
             std::memcpy(buf_, write_data, write_size);
             pos_ = write_size;
@@ -289,7 +299,9 @@ public:
         return WriteUnbuffered(write_data, write_size);
     }
 
+    /// 关闭文件。
     Status Close() override {
+        /// 首先需要先把缓存刷进文件中。
         Status    status       = FlushBuffer();
         const int close_result = ::close(fd_);
         if (close_result < 0 && status.ok()) {
@@ -299,34 +311,44 @@ public:
         return status;
     }
 
+    /// 把缓存内容刷进文件中。
     Status Flush() override { return FlushBuffer(); }
 
+    /// 同步。等待写盘完成。
     Status Sync() override {
         // Ensure new files referred to by the manifest are in the filesystem.
         //
         // This needs to happen before the manifest file is flushed to disk, to
         // avoid crashing in a state where the manifest refers to files that are not
         // yet on disk.
+        /// 确保清单中文件已经在文件系统中了。
+        ///
+        /// 这个操作需要在清单中文件被刷进硬盘之前调用，这是为了避免清单中文件还没有被刷进硬盘之前，系统崩溃。
         Status status = SyncDirIfManifest();
         if (!status.ok()) {
             return status;
         }
 
+        /// 写缓存写入文件
         status = FlushBuffer();
         if (!status.ok()) {
             return status;
         }
 
+        /// 文件的 cache (操作系统管理的) 也需要及时写入硬盘中。
         return SyncFd(fd_, filename_);
     }
 
 private:
+    /// 刷新缓存，将缓存的数据写入底层文件中。
     Status FlushBuffer() {
         Status status = WriteUnbuffered(buf_, pos_);
-        pos_          = 0;
+        pos_          = 0; /// 更新写指针
         return status;
     }
 
+    /// 无缓存（用户空间中的缓存）写，本项目中 fd_ 都没有打开 O_NONBLOCK，即都是阻塞写。
+    /// 将数据直接写入底层文件中。
     Status WriteUnbuffered(const char* data, size_t size) {
         while (size > 0) {
             ssize_t write_result = ::write(fd_, data, size);
@@ -342,6 +364,7 @@ private:
         return Status::OK();
     }
 
+    /// 如果文件是 MANIFEST 开头文件，则确保此文件所在的目录文件及时写到硬盘中。
     Status SyncDirIfManifest() {
         Status status;
         if (!is_manifest_) {
@@ -364,6 +387,7 @@ private:
     //
     // The path argument is only used to populate the description string in the
     // returned Status if an error occurs.
+    /// 确定 fd 关联的文件（可能是普通文件，也可能是目录文件）的 cache 及时被刷进硬盘中。传入的 fd_path 仅是用做错误提示。
     static Status SyncFd(int fd, const std::string& fd_path) {
 #if HAVE_FULLFSYNC
         // On macOS and iOS, fsync() doesn't guarantee durability past power
@@ -390,6 +414,7 @@ private:
     // Returns the directory name in a path pointing to a file.
     //
     // Returns "." if the path does not contain any directory separator.
+    /// 返回文件所在的目录。
     static std::string Dirname(const std::string& filename) {
         std::string::size_type separator_pos = filename.rfind('/');
         if (separator_pos == std::string::npos) {
@@ -424,9 +449,9 @@ private:
 
 private:
     // buf_[0, pos_ - 1] contains data to be written to fd_.
-    char   buf_[kWritableFileBufferSize];
-    size_t pos_ = 0;
-    int    fd_;
+    char   buf_[kWritableFileBufferSize]; /// 写缓存，buf_[0, pos_ - 1] 是缓存的数据。
+    size_t pos_ = 0;                      /// 写缓存指针
+    int    fd_;                           /// 对应的底层文件
 
     const bool        is_manifest_; // True if the file's name starts with MANIFEST.
     const std::string filename_;    /// 要写的文件名(绝对路径或相对于当前路径的路径)
@@ -453,8 +478,8 @@ public:
     const std::string& filename() const { return filename_; }
 
 private:
-    const int         fd_;
-    const std::string filename_;
+    const int         fd_;       /// 文件描述符
+    const std::string filename_; /// 文件名(绝对路径名或相对路径名)
 };
 
 // Tracks the files locked by PosixEnv::LockFile().
@@ -494,6 +519,7 @@ public:
         std::abort();
     }
 
+    /// 新建顺序读文件
     Status NewSequentialFile(const std::string& filename, SequentialFile** result) override {
         int fd = ::open(filename.c_str(), O_RDONLY | kOpenBaseFlags);
         if (fd < 0) {
@@ -505,6 +531,7 @@ public:
         return Status::OK();
     }
 
+    /// 新建随机读文件
     Status NewRandomAccessFile(const std::string& filename, RandomAccessFile** result) override {
         *result = nullptr;
         int fd  = ::open(filename.c_str(), O_RDONLY | kOpenBaseFlags);
@@ -539,6 +566,7 @@ public:
         return status;
     }
 
+    /// 新建可写文件
     Status NewWritableFile(const std::string& filename, WritableFile** result) override {
         int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
         if (fd < 0) {
@@ -550,6 +578,7 @@ public:
         return Status::OK();
     }
 
+    /// 新建追加文件
     Status NewAppendableFile(const std::string& filename, WritableFile** result) override {
         int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
         if (fd < 0) {
@@ -561,8 +590,10 @@ public:
         return Status::OK();
     }
 
+    /// 检测指定文件是否存在
     bool FileExists(const std::string& filename) override { return ::access(filename.c_str(), F_OK) == 0; }
 
+    /// 获取指定目录下的所有文件名，并保存在 *result 中。
     Status GetChildren(const std::string& directory_path, std::vector<std::string>* result) override {
         result->clear();
         ::DIR* dir = ::opendir(directory_path.c_str());
@@ -640,7 +671,7 @@ public:
     }
 
     Status UnlockFile(FileLock* lock) override {
-        PosixFileLock* posix_file_lock = static_cast<PosixFileLock*>(lock);
+        auto* posix_file_lock = static_cast<PosixFileLock*>(lock);
         if (LockOrUnlock(posix_file_lock->fd(), false) == -1) {
             return PosixError("unlock " + posix_file_lock->filename(), errno);
         }

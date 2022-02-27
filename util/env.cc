@@ -57,22 +57,22 @@ void Log(Logger* info_log, const char* format, ...) {
 
 static Status DoWriteStringToFile(Env* env, const Slice& data, const std::string& fname, bool should_sync) {
     WritableFile* file;
-    Status        s = env->NewWritableFile(fname, &file);
-    if (!s.ok()) {
-        return s;
+    Status        status = env->NewWritableFile(fname, &file);
+    if (!status.ok()) {
+        return status;
     }
-    s = file->Append(data);
-    if (s.ok() && should_sync) {
-        s = file->Sync();
+    status = file->Append(data);
+    if (status.ok() && should_sync) {
+        status = file->Sync();
     }
-    if (s.ok()) {
-        s = file->Close();
+    if (status.ok()) {
+        status = file->Close();
     }
     delete file; // Will auto-close if we did not close above
-    if (!s.ok()) {
+    if (!status.ok()) {
         env->RemoveFile(fname);
     }
-    return s;
+    return status;
 }
 
 Status WriteStringToFile(Env* env, const Slice& data, const std::string& fname) {
