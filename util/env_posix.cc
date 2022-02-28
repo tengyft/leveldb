@@ -688,13 +688,16 @@ public:
         return Status::OK();
     }
 
+    /// 向后台线程发起一个任务，这个任务为 background_work_function(background_work_arg) 函数，由后台线程执行。
     void Schedule(void (*background_work_function)(void* background_work_arg), void* background_work_arg) override;
 
+    /// 新建一个线程运行 thread_main(thread_main_arg)。
     void StartThread(void (*thread_main)(void* thread_main_arg), void* thread_main_arg) override {
         std::thread new_thread(thread_main, thread_main_arg);
         new_thread.detach();
     }
 
+    /// 返回测试目录
     Status GetTestDirectory(std::string* result) override {
         const char* env = std::getenv("TEST_TMPDIR");
         if (env && env[0] != '\0') {
@@ -711,6 +714,7 @@ public:
         return Status::OK();
     }
 
+    /// 创建一个新的 logger，用于记录日志。
     Status NewLogger(const std::string& filename, Logger** result) override {
         int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
         if (fd < 0) {
@@ -729,6 +733,7 @@ public:
         }
     }
 
+    /// 返回当前时间，以微秒计。
     uint64_t NowMicros() override {
         static constexpr uint64_t kUsecondsPerSecond = 1000000;
         struct ::timeval          tv;
@@ -736,13 +741,14 @@ public:
         return static_cast<uint64_t>(tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
     }
 
+    /// 调用线程睡眠 micros 微秒。
     void SleepForMicroseconds(int micros) override { std::this_thread::sleep_for(std::chrono::microseconds(micros)); }
 
 private:
-    /// 后台管理线程实际运行的逻辑：
+    /// 后台线程实际运行的逻辑：一直从任务队列中取出任务并执行，没有任务时，就在条件变量上 wait，并等待新任务唤醒。
     void BackgroundThreadMain();
 
-    /// 后台管理线程的入口。
+    /// 后台线程的入口。
     static void BackgroundThreadEntryPoint(PosixEnv* env) { env->BackgroundThreadMain(); }
 
     // Stores the work item data in a Schedule() call.
@@ -751,6 +757,9 @@ private:
     // background thread.
     //
     // This structure is thread-safe because it is immutable.
+    /// BackgroundWorkItem 用于保存后台任务元数据({运行逻辑，输入参数})。
+    /// BackgroundWorkItem 实例由 Schedule() 创建，并且这些实例会被传入 background_work_queue_ 中，供后台线程弹出执行。
+    /// 所有的 BackgroundWorkItem 实例都是不可变的，即构建后，不应该再变化。
     struct BackgroundWorkItem {
         // clang-format off
         explicit BackgroundWorkItem(void (*function)(void* arg), void* arg)
@@ -758,18 +767,19 @@ private:
               arg(arg) {}
         // clang-format on
 
-        void (*const function)(void*);
-        void* const arg;
+        void (*const function)(void*); /// 后台任务运行逻辑
+        void* const arg;               /// 后台任务运行执行时，传入的参数
     };
 
+    /// 互斥锁，用于保护三个变量：background_work_cv_、started_background_thread_、background_work_queue_
     port::Mutex                       background_work_mutex_;
-    port::CondVar background_work_cv_ GUARDED_BY(background_work_mutex_);
-    bool started_background_thread_   GUARDED_BY(background_work_mutex_);
+    port::CondVar background_work_cv_ GUARDED_BY(background_work_mutex_); /// 条件变量，用于 background_work_queue_ 队列中
+    bool started_background_thread_   GUARDED_BY(background_work_mutex_); /// 后台线程是否已经启动
 
     /// 后台管理线程使用的队列
     std::queue<BackgroundWorkItem> background_work_queue_ GUARDED_BY(background_work_mutex_);
 
-    PosixLockTable locks_;        // Thread-safe.
+    PosixLockTable locks_;        // Thread-safe. 用于记录已经创建使用的文件锁
     Limiter        mmap_limiter_; // Thread-safe. 用于限制 mmap 文件的数量
     Limiter        fd_limiter_;   // Thread-safe. 用于限制随机读文件的打开数量
 };
@@ -831,6 +841,7 @@ void PosixEnv::Schedule(void (*background_work_function)(void* background_work_a
 }
 
 void PosixEnv::BackgroundThreadMain() {
+    /// 后台线程运行逻辑：从队列中弹出一个任务，并执行
     while (true) {
         background_work_mutex_.Lock();
 
