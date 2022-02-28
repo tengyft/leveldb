@@ -608,6 +608,7 @@ public:
         return Status::OK();
     }
 
+    /// 删除指定文件
     Status RemoveFile(const std::string& filename) override {
         if (::unlink(filename.c_str()) != 0) {
             return PosixError(filename, errno);
@@ -615,6 +616,7 @@ public:
         return Status::OK();
     }
 
+    /// 创建目录
     Status CreateDir(const std::string& dirname) override {
         if (::mkdir(dirname.c_str(), 0755) != 0) {
             return PosixError(dirname, errno);
@@ -622,6 +624,7 @@ public:
         return Status::OK();
     }
 
+    /// 删除指定目录，这个目录必须为空。
     Status RemoveDir(const std::string& dirname) override {
         if (::rmdir(dirname.c_str()) != 0) {
             return PosixError(dirname, errno);
@@ -629,6 +632,7 @@ public:
         return Status::OK();
     }
 
+    /// 获取指定文件大小
     Status GetFileSize(const std::string& filename, uint64_t* size) override {
         struct ::stat file_stat;
         if (::stat(filename.c_str(), &file_stat) != 0) {
@@ -639,6 +643,7 @@ public:
         return Status::OK();
     }
 
+    /// 文件重命名
     Status RenameFile(const std::string& from, const std::string& to) override {
         if (std::rename(from.c_str(), to.c_str()) != 0) {
             return PosixError(from, errno);
@@ -646,6 +651,7 @@ public:
         return Status::OK();
     }
 
+    /// 文件锁
     Status LockFile(const std::string& filename, FileLock** lock) override {
         *lock = nullptr;
 
@@ -670,6 +676,7 @@ public:
         return Status::OK();
     }
 
+    /// 释放文件锁
     Status UnlockFile(FileLock* lock) override {
         auto* posix_file_lock = static_cast<PosixFileLock*>(lock);
         if (LockOrUnlock(posix_file_lock->fd(), false) == -1) {
@@ -732,8 +739,10 @@ public:
     void SleepForMicroseconds(int micros) override { std::this_thread::sleep_for(std::chrono::microseconds(micros)); }
 
 private:
+    /// 后台管理线程实际运行的逻辑：
     void BackgroundThreadMain();
 
+    /// 后台管理线程的入口。
     static void BackgroundThreadEntryPoint(PosixEnv* env) { env->BackgroundThreadMain(); }
 
     // Stores the work item data in a Schedule() call.
@@ -757,6 +766,7 @@ private:
     port::CondVar background_work_cv_ GUARDED_BY(background_work_mutex_);
     bool started_background_thread_   GUARDED_BY(background_work_mutex_);
 
+    /// 后台管理线程使用的队列
     std::queue<BackgroundWorkItem> background_work_queue_ GUARDED_BY(background_work_mutex_);
 
     PosixLockTable locks_;        // Thread-safe.
@@ -803,6 +813,7 @@ void PosixEnv::Schedule(void (*background_work_function)(void* background_work_a
     background_work_mutex_.Lock();
 
     // Start the background thread, if we haven't done so already.
+    /// 如果还没有启动后台管理线程，则需要先启动后台管理线程。
     if (!started_background_thread_) {
         started_background_thread_ = true;
         std::thread background_thread(PosixEnv::BackgroundThreadEntryPoint, this);
@@ -810,6 +821,7 @@ void PosixEnv::Schedule(void (*background_work_function)(void* background_work_a
     }
 
     // If the queue is empty, the background thread may be waiting for work.
+    /// 如果队列为空，则后台管理线程可能在等待新的任务唤醒。
     if (background_work_queue_.empty()) {
         background_work_cv_.Signal();
     }
