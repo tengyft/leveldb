@@ -697,7 +697,7 @@ public:
         new_thread.detach();
     }
 
-    /// 返回测试目录
+    /// 返回测试目录，并保证测试目录已经创建。可以由环境变量 TEST_TMPDIR 指定。如果没有指定的话，就使用 "/tmp/leveldbtest-{uid}" 目录。
     Status GetTestDirectory(std::string* result) override {
         const char* env = std::getenv("TEST_TMPDIR");
         if (env && env[0] != '\0') {
@@ -779,9 +779,9 @@ private:
     /// 后台管理线程使用的队列
     std::queue<BackgroundWorkItem> background_work_queue_ GUARDED_BY(background_work_mutex_);
 
-    PosixLockTable locks_;        // Thread-safe. 用于记录已经创建使用的文件锁
-    Limiter        mmap_limiter_; // Thread-safe. 用于限制 mmap 文件的数量
-    Limiter        fd_limiter_;   // Thread-safe. 用于限制随机读文件的打开数量
+    PosixLockTable locks_;        /// Thread-safe. 用于记录已经创建使用的文件锁
+    Limiter        mmap_limiter_; /// Thread-safe. 用于限制 mmap 文件的数量
+    Limiter        fd_limiter_;   /// Thread-safe. 用于限制随机读文件的打开数量
 };
 
 // Return the maximum number of concurrent mmaps.

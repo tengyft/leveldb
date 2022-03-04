@@ -197,6 +197,7 @@ public:
     // added to the same Env may run concurrently in different threads.
     // I.e., the caller may not assume that background work items are
     // serialized.
+    /// 向后台线程发一个任务，由后台线程执行。
     virtual void Schedule(void (*function)(void* arg), void* arg) = 0;
 
     // Start a new thread, invoking "function(arg)" within the new thread.
