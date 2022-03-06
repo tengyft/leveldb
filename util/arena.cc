@@ -38,7 +38,7 @@ char* Arena::AllocateFallback(size_t bytes) {
     return result;
 }
 
-/// 按 8 字节对齐的方式申请内存并返回。
+/// 按 8 字节对齐的方式申请内存并返回。即返回地址可以被 8 整除。
 char* Arena::AllocateAligned(size_t bytes) {
     const int align = (sizeof(void*) > 8) ? sizeof(void*) : 8;
     static_assert((align & (align - 1)) == 0, "Pointer size should be a power of 2");
