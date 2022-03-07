@@ -126,6 +126,7 @@ private:
     bool  Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); }
 
     // Return true if key is greater than the data stored in "n"
+    /// 当 n 非空并且 key > n 时，返回 true。
     bool KeyIsAfterNode(const Key& key, Node* n) const;
 
     // Return the earliest node that comes at or after key.
@@ -134,6 +135,7 @@ private:
     // If prev is non-null, fills prev[level] with pointer to previous
     // node at "level" for every level in [0..max_height_-1].
     /// 返回第一个 >= key 的节点，并且如果 prev != 0 时，*prev 所指节点的指针域会被填充好，都是返回节点在各层的前驱节点。
+    /// 如果 SkipList 没有节点，或者所有节点都 < key，则返回 nullptr。
     Node* FindGreaterOrEqual(const Key& key, Node** prev) const;
 
     // Return the latest node with a key < key.
@@ -269,9 +271,11 @@ inline void SkipList<Key, Comparator>::Iterator::SeekToLast() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// 为新插入的节点，计算出层高。
 template <typename Key, class Comparator>
 int SkipList<Key, Comparator>::RandomHeight() {
     // Increase height with probability 1 in kBranching
+    /// 节点有 25% 的概率增加层高。
     static const unsigned int kBranching = 4;
     int                       height     = 1;
     while (height < kMaxHeight && ((rnd_.Next() % kBranching) == 0)) {
@@ -297,8 +301,10 @@ typename SkipList<Key, Comparator>::Node* SkipList<Key, Comparator>::FindGreater
         Node* next = x->Next(level);
         if (KeyIsAfterNode(key, next)) {
             // Keep searching in this list
+            /// key > next && next != nullptr
             x = next;
         } else {
+            /// next == nullptr || key <= next
             if (prev != nullptr)
                 prev[level] = x;
             if (level == 0) {
@@ -371,6 +377,7 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
 
     int height = RandomHeight();
     if (height > GetMaxHeight()) {
+        /// 新插入节点，会更新 SkipList 层高，那么新增加的层也需要更新对应的前驱节点
         for (int i = GetMaxHeight(); i < height; i++) {
             prev[i] = head_;
         }
